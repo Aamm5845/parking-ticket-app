@@ -104,6 +104,7 @@ def generate():
     space_caps = ''.join([char.upper() if char.isalpha() else char for char in space_cleaned])
 
     date_obj = datetime.strptime(data['date'] + ' ' + data['start_time'], '%Y-%m-%d %H:%M')
+    date_obj += timedelta(minutes=1)  # 👈
     start_time = date_obj.strftime('%Y-%m-%d, %H:%M')
     end_time = (date_obj + timedelta(minutes=10)).strftime('%Y-%m-%d, %H:%M')
     date_line = f" {date_obj.strftime('%a, %b %d, %Y at %I:%M %p')}"
