@@ -20,6 +20,7 @@
     #preview {
       max-width: 300px;
       margin-bottom: 15px;
+      display: none;
     }
   </style>
 </head>
@@ -27,27 +28,27 @@
 
   <h2>Scan Parking Ticket</h2>
 
-  <form id="ticketForm" action="/submit" method="POST">
+  <form id="ticketForm" action="/generate" method="POST">
     <label>Ticket Number</label>
     <input type="text" name="ticket_number" id="ticket_number" required>
 
     <label>Meter Number</label>
-    <input type="text" name="meter_number" id="meter_number" required>
+    <input type="text" name="space" id="meter_number" required>
 
     <label>Date</label>
     <input type="date" name="date" id="date" required>
 
     <label>Time</label>
-    <input type="time" name="time" id="time" required>
+    <input type="time" name="start_time" id="time" required>
 
     <button type="submit">Generate PDF</button>
   </form>
 
   <hr>
 
-  <h3>Upload Ticket Photo</h3>
-  <input type="file name="ticket_photo" accept="image/*" capture="environment">
-  <img id="preview" src="#" alt="Image Preview" style="display:none;"/>
+  <h3>📸 Take or Upload Ticket Photo</h3>
+  <input type="file" id="imageInput" name="ticket_photo" accept="image/*" capture="environment">
+  <img id="preview" src="#" alt="Image Preview" />
 
   <script>
     const imageInput = document.getElementById("imageInput");
@@ -66,17 +67,16 @@
 
       // ✨ Simulated OCR — replace with real fetch to backend later
       setTimeout(() => {
-        document.getElementById("ticket_number").value = "TKT123456";
-        document.getElementById("meter_number").value = "MT999";
-        document.getElementById("date").value = "2025-08-01";
-        document.getElementById("time").value = "10:30";
+        document.getElementById("ticket_number").value = "910203081";
+        document.getElementById("meter_number").value = "PL388";
+        document.getElementById("date").value = "2025-07-28";
+        document.getElementById("time").value = "10:23";
 
-        // Auto-submit if all fields are filled
         const allFilled = [...document.querySelectorAll("input[required]")].every(input => input.value);
         if (allFilled) {
           document.getElementById("ticketForm").submit();
         }
-      }, 1500); // simulate 1.5 second OCR delay
+      }, 1500);
     });
   </script>
 
