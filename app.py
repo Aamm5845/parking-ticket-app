@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, send_file, session
+from flask import Flask, render_template, request, redirect, url_for, send_file, session, jsonify
 import os
 import json
 from datetime import datetime, timedelta
@@ -7,7 +7,6 @@ import csv
 from PyPDF2 import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.units import inch
 import re
 
 app = Flask(__name__)
@@ -74,6 +73,19 @@ def signout():
     session.pop('profile', None)
     return redirect(url_for('index'))
 
+@app.route('/api/tickets', methods=['POST'])
+def api_tickets():
+    data = request.get_json()
+    ticket = data.get('ticket_number')
+    meter = data.get('meter_number')
+    date = data.get('date')
+    time = data.get('time')
+    print("Received OCR submission:", data)
+
+    # Optional: Store to session or log
+    session['ocr_submission'] = data
+    return jsonify({"status": "received", "message": "✅ Ticket info received"})
+
 @app.route('/generate', methods=['POST'])
 def generate():
     data = request.form
@@ -87,7 +99,7 @@ def generate():
     auth_code = ' ' + ''.join([str(random.randint(0, 9)) for _ in range(6)])
     response_code = ' 027'
 
-    space_raw = data['space']
+    space_raw = data['space'] if 'space' in data else data['meter_number']
     space_cleaned = re.sub(r'[^A-Za-z0-9]', '', space_raw)
     space_caps = ''.join([char.upper() if char.isalpha() else char for char in space_cleaned])
 
@@ -121,12 +133,12 @@ def generate():
             c.setFont("Helvetica", 11)
             c.drawString(x_pt, y_pt, text)
 
-    # Add Reference number
+    # Add Reference number manually
     ref_x = 2.0836 * 72
     ref_y = (11 - (6.6827 + 0.1584)) * 72
     c.drawString(ref_x, ref_y, reference_number)
 
-    # Add Transaction Date (new)
+    # Add Transaction Date manually
     tx_x = 1.9515 * 72
     tx_y = (11 - (4.8789 + 0.1584)) * 72
     c.drawString(tx_x, tx_y, transaction_datetime)
@@ -147,8 +159,5 @@ def generate():
     return send_file(FILLED_PDF, as_attachment=True)
 
 if __name__ == '__main__':
-    import os
-
-port = int(os.environ.get("PORT", 5000))
-app.run(host="0.0.0.0", port=port)
-
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
