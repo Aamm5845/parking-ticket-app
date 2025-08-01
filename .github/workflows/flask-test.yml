@@ -26,4 +26,14 @@ jobs:
         run: |
           python app.py &
           sleep 5
-          curl --fail http://127.0.0.1:5000 || echo "❌ App did not run properly"
+
+      - name: Test PDF Generation
+        run: |
+          curl -X POST http://127.0.0.1:5000/generate \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            -o output.pdf || echo "❌ PDF generation failed"
+
+      - name: Check if PDF was generated
+        run: |
+          file output.pdf | grep -q "PDF document" && echo "✅ PDF generated" || (echo "❌ Not a PDF" && exit 1)
