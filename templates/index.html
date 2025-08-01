@@ -65,18 +65,31 @@
       };
       reader.readAsDataURL(file);
 
-      // ✨ Simulated OCR — replace with real fetch to backend later
-      setTimeout(() => {
-        document.getElementById("ticket_number").value = "910203081";
-        document.getElementById("meter_number").value = "PL388";
-        document.getElementById("date").value = "2025-07-28";
-        document.getElementById("time").value = "10:23";
+      // 📤 Upload to backend for OCR
+      const formData = new FormData();
+      formData.append('image', file);
+
+      try {
+        const res = await fetch('/api/tickets', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await res.json();
+
+        if (data.ticket_number) document.getElementById("ticket_number").value = data.ticket_number;
+        if (data.meter_number) document.getElementById("meter_number").value = data.meter_number;
+        if (data.date) document.getElementById("date").value = data.date;
+        if (data.time) document.getElementById("time").value = data.time;
 
         const allFilled = [...document.querySelectorAll("input[required]")].every(input => input.value);
         if (allFilled) {
           document.getElementById("ticketForm").submit();
         }
-      }, 1500);
+      } catch (err) {
+        alert("❌ Failed to process image.");
+        console.error(err);
+      }
     });
   </script>
 
