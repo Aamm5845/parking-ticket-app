@@ -8,157 +8,196 @@ from PyPDF2 import PdfReader, PdfWriter
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 import re
+import pytesseract
+from PIL import Image
 
-app = Flask(__name__)
+
+app = Flask(name)
 app.secret_key = 'your_secret_key_here'
+
 
 PROFILE_PATH = 'profile.json'
 TEMPLATE_PDF = 'static/base_template.pdf'
 FILLED_PDF = 'static/output.pdf'
 CSV_PATH = 'static/Mobicite_Placeholder_Locations.csv'
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-# Load profiles or create empty
+
+Load profiles or create empty
+
+
 if os.path.exists(PROFILE_PATH):
-    with open(PROFILE_PATH, 'r') as f:
-        try:
-            profiles = json.load(f)
-        except json.JSONDecodeError:
-            profiles = {}
+with open(PROFILE_PATH, 'r') as f:
+try:
+profiles = json.load(f)
+except json.JSONDecodeError:
+profiles = {}
 else:
-    profiles = {}
+profiles = {}
+
 
 @app.route('/')
 def index():
-    profile = session.get('profile')
-    return render_template('index.html', profile=profile)
+profile = session.get('profile')
+return render_template('index.html', profile=profile)
+
 
 @app.route('/signin', methods=['GET', 'POST'])
 def signin():
-    if request.method == 'POST':
-        profile = {
-            'first_name': request.form['first_name'],
-            'last_name': request.form['last_name'],
-            'address': request.form['address'],
-            'email': request.form['email'],
-            'license': request.form['license']
-        }
-        key = profile['email']
-        profiles[key] = profile
-        with open(PROFILE_PATH, 'w') as f:
-            json.dump(profiles, f, indent=2)
-        session['profile'] = profile
-        return redirect(url_for('index'))
-    return render_template('signin.html')
+if request.method == 'POST':
+profile = {
+'first_name': request.form['first_name'],
+'last_name': request.form['last_name'],
+'address': request.form['address'],
+'email': request.form['email'],
+'license': request.form['license']
+}
+key = profile['email']
+profiles[key] = profile
+with open(PROFILE_PATH, 'w') as f:
+json.dump(profiles, f, indent=2)
+session['profile'] = profile
+return redirect(url_for('index'))
+return render_template('signin.html')
+
 
 @app.route('/edit_profile', methods=['GET', 'POST'])
 def edit_profile():
-    profile = session.get('profile')
-    if not profile:
-        return redirect(url_for('signin'))
-    if request.method == 'POST':
-        profile['first_name'] = request.form['first_name']
-        profile['last_name'] = request.form['last_name']
-        profile['address'] = request.form['address']
-        profile['email'] = request.form['email']
-        profile['license'] = request.form['license']
-        profiles[profile['email']] = profile
-        with open(PROFILE_PATH, 'w') as f:
-            json.dump(profiles, f, indent=2)
-        session['profile'] = profile
-        return redirect(url_for('index'))
-    return render_template('edit_profile.html', profile=profile)
+profile = session.get('profile')
+if not profile:
+return redirect(url_for('signin'))
+if request.method == 'POST':
+profile['first_name'] = request.form['first_name']
+profile['last_name'] = request.form['last_name']
+profile['address'] = request.form['address']
+profile['email'] = request.form['email']
+profile['license'] = request.form['license']
+profiles[profile['email']] = profile
+with open(PROFILE_PATH, 'w') as f:
+json.dump(profiles, f, indent=2)
+session['profile'] = profile
+return redirect(url_for('index'))
+return render_template('edit_profile.html', profile=profile)
+
 
 @app.route('/signout')
 def signout():
-    session.pop('profile', None)
-    return redirect(url_for('index'))
+session.pop('profile', None)
+return redirect(url_for('index'))
+
 
 @app.route('/api/tickets', methods=['POST'])
 def api_tickets():
-    data = request.get_json()
-    ticket = data.get('ticket_number')
-    meter = data.get('meter_number')
-    date = data.get('date')
-    time = data.get('time')
-    print("Received OCR submission:", data)
+if 'ticket_photo' not in request.files:
+return jsonify({"error": "No image uploaded"}), 400
 
-    # Optional: Store to session or log
-    session['ocr_submission'] = data
-    return jsonify({"status": "received", "message": "✅ Ticket info received"})
+
+image_file = request.files['ticket_photo']
+image_path = os.path.join(UPLOAD_FOLDER, image_file.filename)
+image_file.save(image_path)
+
+try:
+    text = pytesseract.image_to_string(Image.open(image_path))
+    print("OCR Output:", text)
+
+    ticket_match = re.search(r'(\d{9})', text)
+    meter_match = re.search(r'(PL\d{3})', text)
+    time_match = re.search(r'(\d{2}:\d{2})', text)
+
+    ticket_number = ticket_match.group(1) if ticket_match else "000000000"
+    meter_number = meter_match.group(1) if meter_match else "PL000"
+    time_str = time_match.group(1) if time_match else "10:00"
+
+    date_today = datetime.today().strftime('%Y-%m-%d')
+
+    return jsonify({
+        "ticket_number": ticket_number,
+        "meter_number": meter_number,
+        "date": date_today,
+        "time": time_str
+    })
+except Exception as e:
+    return jsonify({"error": str(e)}), 500
+
+
 
 @app.route('/generate', methods=['POST'])
 def generate():
-    data = request.form
+data = request.form
 
-    ticket_number = data['ticket_number']
-    if not ticket_number.isdigit() or len(ticket_number) != 9:
-        return "Ticket number must be exactly 9 digits.", 400
 
-    transaction = ' 00003' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
-    reference_number = ' ' + ''.join([str(random.randint(0, 9)) for _ in range(18)])
-    auth_code = ' ' + ''.join([str(random.randint(0, 9)) for _ in range(6)])
-    response_code = ' 027'
+ticket_number = data['ticket_number']
+if not ticket_number.isdigit() or len(ticket_number) != 9:
+    return "Ticket number must be exactly 9 digits.", 400
 
-    space_raw = data['space'] if 'space' in data else data['meter_number']
-    space_cleaned = re.sub(r'[^A-Za-z0-9]', '', space_raw)
-    space_caps = ''.join([char.upper() if char.isalpha() else char for char in space_cleaned])
+transaction = ' 00003' + ''.join([str(random.randint(0, 9)) for _ in range(5)])
+reference_number = ' ' + ''.join([str(random.randint(0, 9)) for _ in range(18)])
+auth_code = ' ' + ''.join([str(random.randint(0, 9)) for _ in range(6)])
+response_code = ' 027'
 
-    date_obj = datetime.strptime(data['date'] + ' ' + data['start_time'], '%Y-%m-%d %H:%M')
-    date_obj += timedelta(minutes=1)  # 👈
-    start_time = date_obj.strftime('%Y-%m-%d, %H:%M')
-    end_time = (date_obj + timedelta(minutes=10)).strftime('%Y-%m-%d, %H:%M')
-    date_line = f" {date_obj.strftime('%a, %b %d, %Y at %I:%M %p')}"
-    transaction_datetime = ' ' + date_obj.strftime('%Y-%m-%d, %H:%M')
+space_raw = data['space'] if 'space' in data else data['meter_number']
+space_cleaned = re.sub(r'[^A-Za-z0-9]', '', space_raw)
+space_caps = ''.join([char.upper() if char.isalpha() else char for char in space_cleaned])
 
-    values = {
-        'Transaction number': transaction,
-        'Authorization code': auth_code,
-        'Response code': response_code,
-        'Space number': ' ' + space_caps,
-        'Start of session': ' ' + start_time,
-        'End of session': ' ' + end_time,
-        'Top date line': date_line,
-        'Reference number': reference_number
-    }
+date_obj = datetime.strptime(data['date'] + ' ' + data['start_time'], '%Y-%m-%d %H:%M')
+date_obj += timedelta(minutes=1)
+start_time = date_obj.strftime('%Y-%m-%d, %H:%M')
+end_time = (date_obj + timedelta(minutes=10)).strftime('%Y-%m-%d, %H:%M')
+date_line = f" {date_obj.strftime('%a, %b %d, %Y at %I:%M %p')}"
+transaction_datetime = ' ' + date_obj.strftime('%Y-%m-%d, %H:%M')
 
-    packet_path = 'static/temp.pdf'
-    c = canvas.Canvas(packet_path, pagesize=letter)
+values = {
+    'Transaction number': transaction,
+    'Authorization code': auth_code,
+    'Response code': response_code,
+    'Space number': ' ' + space_caps,
+    'Start of session': ' ' + start_time,
+    'End of session': ' ' + end_time,
+    'Top date line': date_line,
+    'Reference number': reference_number
+}
 
-    with open(CSV_PATH, 'r') as csvfile:
-        reader = csv.DictReader(csvfile)
-        for row in reader:
-            field = row['field']
-            text = values.get(field, row['text'])
-            x_pt = float(row['x_in']) * 72
-            y_pt = (11 - (float(row['y_in']) + 0.1584)) * 72
-            c.setFont("Helvetica", 11)
-            c.drawString(x_pt, y_pt, text)
+packet_path = 'static/temp.pdf'
+c = canvas.Canvas(packet_path, pagesize=letter)
 
-    # Add Reference number manually
-    ref_x = 2.0836 * 72
-    ref_y = (11 - (6.6827 + 0.1584)) * 72
-    c.drawString(ref_x, ref_y, reference_number)
+with open(CSV_PATH, 'r') as csvfile:
+    reader = csv.DictReader(csvfile)
+    for row in reader:
+        field = row['field']
+        text = values.get(field, row['text'])
+        x_pt = float(row['x_in']) * 72
+        y_pt = (11 - (float(row['y_in']) + 0.1584)) * 72
+        c.setFont("Helvetica", 11)
+        c.drawString(x_pt, y_pt, text)
 
-    # Add Transaction Date manually
-    tx_x = 1.9515 * 72
-    tx_y = (11 - (4.8789 + 0.1584)) * 72
-    c.drawString(tx_x, tx_y, transaction_datetime)
+ref_x = 2.0836 * 72
+ref_y = (11 - (6.6827 + 0.1584)) * 72
+c.drawString(ref_x, ref_y, reference_number)
 
-    c.save()
+tx_x = 1.9515 * 72
+tx_y = (11 - (4.8789 + 0.1584)) * 72
+c.drawString(tx_x, tx_y, transaction_datetime)
 
-    output = PdfWriter()
-    background = PdfReader(TEMPLATE_PDF)
-    overlay = PdfReader(packet_path)
+c.save()
 
-    page = background.pages[0]
-    page.merge_page(overlay.pages[0])
-    output.add_page(page)
+output = PdfWriter()
+background = PdfReader(TEMPLATE_PDF)
+overlay = PdfReader(packet_path)
 
-    with open(FILLED_PDF, 'wb') as f:
-        output.write(f)
+page = background.pages[0]
+page.merge_page(overlay.pages[0])
+output.add_page(page)
 
-    return send_file(FILLED_PDF, as_attachment=True)
+with open(FILLED_PDF, 'wb') as f:
+    output.write(f)
 
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+return send_file(FILLED_PDF, as_attachment=True)
+
+
+
+if name == 'main':
+port = int(os.environ.get("PORT", 5000))
+app.run(host="0.0.0.0", port=port)
+
+
